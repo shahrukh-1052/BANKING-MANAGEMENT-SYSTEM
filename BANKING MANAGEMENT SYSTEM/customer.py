@@ -1,7 +1,7 @@
-#Customer Details
+# customer.py
 from database import *
-class Customer:
 
+class Customer:
     def __init__(self, username, password, name, age, city, account_number):
         self.__username = username
         self.__password = password
@@ -11,6 +11,9 @@ class Customer:
         self.__account_number = account_number
 
     def createuser(self):
-        db_query(f"INSERT INTO customers (username, password, name, age, city, account_number, status) VALUES ('{self.__username}', '{self.__password}', '{self.__name}', '{self.__age}', '{self.__city}', '{self.__account_number}', 1);")
+        db_query(f"""
+            INSERT INTO customers (username, password, name, age, city, account_number, balance, status)
+            VALUES ('{self.__username}', '{self.__password}', '{self.__name}', '{self.__age}',
+                    '{self.__city}', '{self.__account_number}', 0, 1);
+        """)
         mydb.commit()
-        

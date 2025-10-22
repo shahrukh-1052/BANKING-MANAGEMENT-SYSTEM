@@ -1,97 +1,99 @@
-# Bank Services
+# Bank Services (Revised for Central Transaction History Table)
 from database import *
 import datetime
-
 
 class Bank:
     def __init__(self, username, account_number):
         self.__username = username
         self.__account_number = account_number
 
-    def create_transaction_table(self):
-        db_query(f"""CREATE TABLE IF NOT EXISTS {self.__username}_transactions
-                 (timedate VARCHAR(30),
-                 account_number INTEGER,
-                 remarks VARCHAR(30),
-                 amount INTEGER);
-                 """)
-
+    # Show Balance
     def balanceenquiry(self):
         temp = db_query(
             f"SELECT balance FROM customers WHERE username = '{self.__username}';")
         print(f"{self.__username} Balance is {temp[0][0]}")
 
+    # Deposit Money
     def deposit(self, amount):
         temp = db_query(
             f"SELECT balance FROM customers WHERE username = '{self.__username}';")
-        test = amount + temp[0][0]
+        new_balance = temp[0][0] + amount
         db_query(
-            f"UPDATE customers SET balance = '{test}' WHERE username = '{self.__username}'; ")
-        self.balanceenquiry()
-        db_query(f"INSERT INTO {self.__username}_transaction VALUES ("
-                 f"'{datetime.datetime.now()}',"
-                 f"'{self.__account_number}',"
-                 f"'Amount Deposit',"
-                 f"'{amount}'"
-                 f")")
-        print(f"{self.__username} Amount is Sucessfully Depositted into Your Account {self.__account_number}")
+            f"UPDATE customers SET balance = {new_balance} WHERE username = '{self.__username}';")
+        mydb.commit()
 
+        # Record transaction
+        db_query(
+            f"INSERT INTO transaction_history (username, transaction_type, amount) "
+            f"VALUES ('{self.__username}', 'DEPOSIT', {amount});")
+        mydb.commit()
+
+        print(f"Amount ₹{amount} Deposited Successfully!")
+        self.balanceenquiry()
+
+    # Withdraw Money
     def withdraw(self, amount):
         temp = db_query(
             f"SELECT balance FROM customers WHERE username = '{self.__username}';")
         if amount > temp[0][0]:
-            print("Insufficient Balance Please Deposit Money")
+            print(" Insufficient Balance!")
         else:
-            test = temp[0][0] - amount
+            new_balance = temp[0][0] - amount
             db_query(
-                f"UPDATE customers SET balance = '{test}' WHERE username = '{self.__username}'; ")
-            self.balanceenquiry()
-            db_query(f"INSERT INTO {self.__username}_transaction VALUES ("
-                     f"'{datetime.datetime.now()}',"
-                     f"'{self.__account_number}',"
-                     f"'Amount Withdraw',"
-                     f"'{amount}'"
-                     f")")
-            print(
-                f"{self.__username} Amount is Sucessfully Withdrawn from Your Account {self.__account_number}")
+                f"UPDATE customers SET balance = {new_balance} WHERE username = '{self.__username}';")
+            mydb.commit()
 
-    def fundtransfer(self, receive, amount):
-        temp = db_query(
+            db_query(
+                f"INSERT INTO transaction_history (username, transaction_type, amount) "
+                f"VALUES ('{self.__username}', 'WITHDRAW', {amount});")
+            mydb.commit()
+
+            print(f"Amount ₹{amount} Withdrawn Successfully!")
+            self.balanceenquiry()
+
+    # Fund Transfer
+    def fundtransfer(self, receiver_acc, amount):
+        sender_balance = db_query(
             f"SELECT balance FROM customers WHERE username = '{self.__username}';")
-        if amount > temp[0][0]:
-            print("Insufficient Balance Please Deposit Money")
-        else:
-            temp2 = db_query(
-                f"SELECT balance FROM customers WHERE account_number = '{receive}';")
-            if temp2 == []:
-                print("Account Number Does not Exists")
-            else:
-                test1 = temp[0][0] - amount
-                test2 = amount + temp2[0][0]
-                db_query(
-                    f"UPDATE customers SET balance = '{test1}' WHERE username = '{self.__username}'; ")
-                db_query(
-                    f"UPDATE customers SET balance = '{test2}' WHERE account_number = '{receive}'; ")
-                receiver_username = db_query(
-                    f"SELECT username FROM customers where account_number = '{receive}';")
-                self.balanceenquiry()
-                db_query(f"INSERT INTO {receiver_username[0][0]}_transaction VALUES ("
-                         f"'{datetime.datetime.now()}',"
-                         f"'{self.__account_number}',"
-                         f"'Fund Transfer From {self.__account_number}',"
-                         f"'{amount}'"
-                         f")")
-                db_query(f"INSERT INTO {self.__username}_transaction VALUES ("
-                         f"'{datetime.datetime.now()}',"
-                         f"'{self.__account_number}',"
-                         f"'Fund Transfer -> {receive}',"
-                         f"'{amount}'"
-                         f")")
-                print(
-                    f"{self.__username} Amount is Sucessfully Transferred from Your Account {self.__account_number}")
-            
-     # Added method to get transactions of a specific user
-    def get_transactions(self):
-        query = f"SELECT * FROM {self.__username}_transactions;"
-        transactions = db_query(query)
-        return transactions
+        if amount > sender_balance[0][0]:
+            print(" Insufficient Balance!")
+            return
+
+        receiver = db_query(
+            f"SELECT username, balance FROM customers WHERE account_number = {receiver_acc};")
+        if not receiver:
+            print(" Receiver account not found.")
+            return
+
+        receiver_username, receiver_balance = receiver[0]
+        new_sender_balance = sender_balance[0][0] - amount
+        new_receiver_balance = receiver_balance + amount
+
+        db_query(
+            f"UPDATE customers SET balance = {new_sender_balance} WHERE username = '{self.__username}';")
+        db_query(
+            f"UPDATE customers SET balance = {new_receiver_balance} WHERE account_number = {receiver_acc};")
+        mydb.commit()
+
+        # Record transactions
+        db_query(
+            f"INSERT INTO transaction_history (username, transaction_type, amount) "
+            f"VALUES ('{self.__username}', 'TRANSFER_OUT', {amount});")
+        db_query(
+            f"INSERT INTO transaction_history (username, transaction_type, amount) "
+            f"VALUES ('{receiver_username}', 'TRANSFER_IN', {amount});")
+        mydb.commit()
+
+        print(f" ₹{amount} transferred successfully to account {receiver_acc}!")
+
+    # View Transaction History
+    def view_transaction_history(self):
+        history = db_query(
+            f"SELECT transaction_type, amount, transaction_date FROM transaction_history "
+            f"WHERE username = '{self.__username}' ORDER BY transaction_date DESC;")
+        if not history:
+            print("No transactions found.")
+            return
+        print(f"\nTransaction History for {self.__username}:")
+        for t in history:
+            print(f"{t[2]} | {t[0]} | ₹{t[1]}")
